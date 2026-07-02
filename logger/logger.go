@@ -6,6 +6,10 @@ import (
 	"time"
 )
 
+type objAbortSignal struct {
+	iExitCode int
+}
+
 // Logger handles logging to file and stdout with verbosity levels
 type Logger struct {
 	IVerbose  int
@@ -40,7 +44,7 @@ func (l *Logger) LogEntry(strMsg string, iMsgLevel int, bAbort bool) {
 	}
 	if bAbort {
 		l.Close()
-		os.Exit(9)
+		panic(&objAbortSignal{iExitCode: 1})
 	}
 }
 
@@ -53,4 +57,20 @@ func (l *Logger) Log(strMsg string) {
 func (l *Logger) Close() {
 	l.ObjLogOut.Close()
 	fmt.Println("objLogOut closed")
+}
+
+func (l *Logger) RecoverAbort() {
+	objRecovered := recover()
+	if objRecovered == nil {
+		return
+	}
+
+	objAbort, bIsAbortSignal := objRecovered.(*objAbortSignal)
+	if !bIsAbortSignal {
+		strMsg := fmt.Sprintf("unexpected panic: %v", objRecovered)
+		l.LogEntry(strMsg, 0, false)
+		os.Exit(1)
+	}
+
+	os.Exit(objAbort.iExitCode)
 }
