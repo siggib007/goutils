@@ -44,7 +44,7 @@ func (l *Logger) LogEntry(strMsg string, iMsgLevel int, bAbort bool) {
 	}
 	if bAbort {
 		l.Close()
-		panic(&objAbortSignal{iExitCode: 1})
+		panic(&objAbortSignal{iExitCode: 9})
 	}
 }
 
@@ -69,7 +69,8 @@ func (l *Logger) RecoverAbort() {
 	if !bIsAbortSignal {
 		strMsg := fmt.Sprintf("unexpected panic: %v", objRecovered)
 		l.LogEntry(strMsg, 0, false)
-		os.Exit(1)
+		l.Close()
+		os.Exit(5)
 	}
 
 	os.Exit(objAbort.iExitCode)
