@@ -188,3 +188,25 @@ func (a *APIClient) MakeAPICall(strURL string, dictHeader map[string]string, str
 
 	return APIResponse{BSuccess: true, ObjData: objResult}
 }
+
+func BuildURL(strBaseURL string, strEndPoint string, dictParams map[string]string) string {
+	if strings.Contains(strBaseURL, "apisim") {
+		return strBaseURL
+	}
+
+	if !strings.HasSuffix(strBaseURL, "/") {
+		strBaseURL += "/"
+	}
+
+	if len(dictParams) == 0 {
+		return strBaseURL + strEndPoint
+	}
+
+	objValues := url.Values{}
+	for strKey, strValue := range dictParams {
+		objValues.Set(strKey, strValue)
+	}
+	strParams := objValues.Encode()
+
+	return strBaseURL + strEndPoint + "?" + strParams
+}
