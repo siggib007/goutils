@@ -1,8 +1,10 @@
 package utils
 
 import (
+	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 )
@@ -74,4 +76,46 @@ func ListFiles(strDirectory string, strPattern string) []string {
 		}
 	}
 	return lstFiles
+}
+
+// CheckPath reports whether strPath exists, whether it is a directory,
+// and whether it was given as a fully qualified (absolute) path.
+func CheckPath(strPath string) (bIsDir bool, bIsAbsolute bool, err error) {
+	if strPath == "" {
+		return false, false, fmt.Errorf("CheckPath: empty path provided")
+	}
+
+	bIsAbsolute = filepath.IsAbs(strPath)
+
+	strAbsPath, errAbs := filepath.Abs(strPath)
+	if errAbs != nil {
+		strAbsPath = strPath // fall back to original, still attempt Stat
+	}
+
+	objInfo, err := os.Stat(strAbsPath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return false, bIsAbsolute, fmt.Errorf("CheckPath: path does not exist: %s", strAbsPath)
+		}
+		return false, bIsAbsolute, fmt.Errorf("CheckPath: unable to stat path %s: %w", strAbsPath, err)
+	}
+
+	bIsDir = objInfo.IsDir()
+	return bIsDir, bIsAbsolute, nil
+}
+
+func FileExists(strPath string) bool {
+	objInfo, err := os.Stat(strPath)
+	if err != nil {
+		return false
+	}
+	return !objInfo.IsDir()
+}
+
+func DirExists(strPath string) bool {
+	objInfo, err := os.Stat(strPath)
+	if err != nil {
+		return false
+	}
+	return objInfo.IsDir()
 }
