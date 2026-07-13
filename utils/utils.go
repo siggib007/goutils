@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // IsInt returns true if the string can be parsed as a non-negative integer
@@ -118,4 +119,38 @@ func DirExists(strPath string) bool {
 		return false
 	}
 	return objInfo.IsDir()
+}
+
+func BasePaths() (string, string) {
+	// Establish base directory and script name
+	strExePath, err := os.Executable()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "cannot determine executable path: "+err.Error())
+		os.Exit(3)
+	}
+	strExeDir := filepath.Dir(strExePath)
+	strScriptName := filepath.Base(strExePath)
+
+	strISO := time.Now().Format("-2006-01-02T15-04-05")
+
+	// Log directory
+	strLogDir := filepath.Join(strExeDir, "Logs")
+	if !ChkDir(strLogDir) {
+		fmt.Fprintln(os.Stderr, "Log directory doesn't exists and couldn't create it")
+		os.Exit(3)
+	}
+
+	// Default config and log file paths
+	strBaseName := strScriptName
+	iDotPos := strings.LastIndex(strScriptName, ".")
+	if iDotPos >= 1 {
+		strBaseName = strScriptName[:iDotPos]
+	}
+	strConfName := strBaseName + ".ini"
+	strDefConf := filepath.Join(strExeDir, strConfName)
+
+	strLogFilename := strBaseName + strISO + ".log"
+	strDefLogFile := filepath.Join(strLogDir, strLogFilename)
+
+	return strDefConf, strDefLogFile
 }
