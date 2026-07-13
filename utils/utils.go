@@ -79,6 +79,22 @@ func ListFiles(strDirectory string, strPattern string) []string {
 	return lstFiles
 }
 
+func FindFilesExt(strDirectory string, strExt string) []string {
+	var lstFiles []string
+	objEntries, err := os.ReadDir(strDirectory)
+	if err != nil {
+		return lstFiles
+	}
+	for _, objEntry := range objEntries {
+		if !objEntry.IsDir() {
+			if strings.EqualFold(filepath.Ext(objEntry.Name()), strExt) {
+				lstFiles = append(lstFiles, objEntry.Name())
+			}
+		}
+	}
+	return lstFiles
+}
+
 // CheckPath reports whether strPath exists, whether it is a directory,
 // and whether it was given as a fully qualified (absolute) path.
 func CheckPath(strPath string) (bIsDir bool, bIsAbsolute bool, err error) {
