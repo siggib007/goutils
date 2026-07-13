@@ -121,12 +121,19 @@ func DirExists(strPath string) bool {
 	return objInfo.IsDir()
 }
 
-func BasePaths() (string, string) {
+// PathConfig holds the base paths resolved at startup.
+type PathConfig struct {
+	StrDefConf    string // default config file path
+	StrDefLogFile string // default log file path
+	StrScriptName string // name of the running script/exe
+	StrExeDir     string // directory containing the executable
+}
+
+func BasePaths() (*PathConfig, error) {
 	// Establish base directory and script name
 	strExePath, err := os.Executable()
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "cannot determine executable path: "+err.Error())
-		os.Exit(3)
+		return nil, err
 	}
 	strExeDir := filepath.Dir(strExePath)
 	strScriptName := filepath.Base(strExePath)
@@ -136,8 +143,7 @@ func BasePaths() (string, string) {
 	// Log directory
 	strLogDir := filepath.Join(strExeDir, "Logs")
 	if !ChkDir(strLogDir) {
-		fmt.Fprintln(os.Stderr, "Log directory doesn't exists and couldn't create it")
-		os.Exit(3)
+		return nil, err
 	}
 
 	// Default config and log file paths
@@ -152,5 +158,12 @@ func BasePaths() (string, string) {
 	strLogFilename := strBaseName + strISO + ".log"
 	strDefLogFile := filepath.Join(strLogDir, strLogFilename)
 
-	return strDefConf, strDefLogFile
+	objPaths := &PathConfig{
+		StrDefConf:    strDefConf,
+		StrDefLogFile: strDefLogFile,
+		StrScriptName: strScriptName,
+		StrExeDir:     strExeDir,
+	}
+
+	return objPaths, nil
 }
