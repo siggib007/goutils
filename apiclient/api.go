@@ -3,6 +3,7 @@ package apiclient
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"mime/multipart"
@@ -181,6 +182,10 @@ func (a *APIClient) MakeAPICall(strURL string, dictHeader map[string]string, str
 		return APIResponse{BSuccess: false, StrError: "response was HTML or empty"}
 	}
 
+	if err := ValidateJSONShape(objRespBody); err != nil {
+		return APIResponse{BSuccess: false, StrError: err.Error()}
+	}
+
 	var objResult any
 	if err := json.Unmarshal(objRespBody, &objResult); err != nil {
 		return APIResponse{BSuccess: false, StrError: fmt.Sprintf("failed to parse JSON: %s", err.Error())}
@@ -209,4 +214,28 @@ func BuildURL(strBaseURL string, strEndPoint string, dictParams map[string]strin
 	strParams := objValues.Encode()
 
 	return strBaseURL + strEndPoint + "?" + strParams
+}
+
+// ValidateJSONShape performs a cheap guard check that a response body
+// looks like top-level JSON (object or array) before attempting to
+// unmarshal it. It does not validate full JSON syntax — json.Unmarshal
+// still does that — this only exists to produce a clear, specific error
+// when a caller receives HTML, XML, or plaintext instead of JSON,
+// rather than json.Unmarshal's generic parse error.
+func ValidateJSONShape(bBody []byte) error {
+	strTrimmed := strings.TrimSpace(string(bBody))
+	if len(strTrimmed) == 0 {
+		return errors.New("response body is empty")
+	}
+
+	cFirst := strTrimmed[0]
+	if cFirst != '{' && cFirst != '[' {
+		strPreview := strTrimmed
+		if len(strPreview) > 100 {
+			strPreview = strPreview[:100] + "..."
+		}
+		return fmt.Errorf("response does not look like JSON: %s", strPreview)
+	}
+
+	return nil
 }
