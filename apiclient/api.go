@@ -171,10 +171,15 @@ func (a *APIClient) MakeAPICall(strURL string, dictHeader map[string]string, str
 	if err != nil {
 		return APIResponse{BSuccess: false, StrError: err.Error()}
 	}
+	strPreview := string(objRespBody)
+	a.objLogger.LogEntry(fmt.Sprintf("Response from API was:\n%v", strPreview), 8, false)
+	if len(strPreview) > 100 {
+		strPreview = strPreview[:100] + "..."
+	}
 
 	if objResp.StatusCode != 200 && objResp.StatusCode != 201 && objResp.StatusCode != 204 {
 		a.objLogger.LogEntry(fmt.Sprintf("HTTP Error: %d - %s", objResp.StatusCode, string(objRespBody)), 3, false)
-		return APIResponse{BSuccess: false, StrError: fmt.Sprintf("HTTP %d: %s", objResp.StatusCode, string(objRespBody))}
+		return APIResponse{BSuccess: false, StrError: fmt.Sprintf("HTTP %d: %s", objResp.StatusCode, strPreview)}
 	}
 
 	strRespText := string(objRespBody)
