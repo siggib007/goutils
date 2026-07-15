@@ -178,7 +178,7 @@ func (a *APIClient) MakeAPICall(strURL string, dictHeader map[string]string, str
 	}
 
 	if objResp.StatusCode != 200 && objResp.StatusCode != 201 && objResp.StatusCode != 204 {
-		a.objLogger.LogEntry(fmt.Sprintf("HTTP Error: %d - %s", objResp.StatusCode, string(objRespBody)), 3, false)
+		a.objLogger.LogEntry(fmt.Sprintf("HTTP Error: %d - %s", objResp.StatusCode, strPreview), 3, false)
 		return APIResponse{BSuccess: false, StrError: fmt.Sprintf("HTTP %d: %s", objResp.StatusCode, strPreview)}
 	}
 
