@@ -1,6 +1,7 @@
 package smssender
 
 import (
+	"errors"
 	"fmt"
 	"net/url"
 	"regexp"
@@ -11,15 +12,12 @@ import (
 	"github.com/siggib007/goutils/logger"
 )
 
-type Config struct {
+type TwilioConfig struct {
 	BaseURL      string
 	ClientID     string
 	ClientSecret string
 	MsgFrom      string
 	Proxy        string
-	LogFile      string
-	ConfFile     string
-	Verbose      int
 	MinQuiet     int
 	TimeOut      int
 	MaxMsgLen    int
@@ -31,19 +29,24 @@ type SendOptions struct {
 	AppName string
 }
 
-func SendSMS(objSendOption SendOptions, objCfg Config, objLogger *logger.Logger) {
+func SendSMS(objSendOption SendOptions, objCfg TwilioConfig, objLogger *logger.Logger) error {
+	// Validate required config
+	if objCfg.BaseURL == "" || objCfg.ClientID == "" || objCfg.ClientSecret == "" {
+		return fmt.Errorf("SendSMS: Twilio credentials or URL missing")
+	}
+
 	if err := ValidateAlphanumericSenderId(objCfg.MsgFrom); err != nil {
-		objLogger.LogEntry(err.Error(), 0, true)
+		return fmt.Errorf("SendSMS: invalid sender id: %w", err)
 	}
 
 	strPhone, err := SanitizePhone(objSendOption.MsgTo)
 	if err != nil {
-		objLogger.LogEntry(err.Error(), 0, true)
+		return fmt.Errorf("SendSMS: invalid to phone number: %w", err)
 	}
 
-	strMsg, err := SanitizeSmsBody(objSendOption.Message)
+	strMsg, err := SanitizeSmsBody(objSendOption.Message, objCfg.MaxMsgLen)
 	if err != nil {
-		objLogger.LogEntry(err.Error(), 0, true)
+		return fmt.Errorf("SendSMS: bad message: %w", err)
 	}
 
 	objValues := url.Values{}
@@ -71,21 +74,19 @@ func SendSMS(objSendOption SendOptions, objCfg Config, objLogger *logger.Logger)
 	objLogger.Log("Posting Message")
 	objResp := objAPI.MakeAPICall(objCallOptions)
 	if !objResp.BSuccess {
-		objLogger.LogEntry(fmt.Sprintf("Failed to send message: %s", objResp.StrError), 0, true)
+		return fmt.Errorf("SendSMS: Failed to send message: %w", err)
 	}
 	dictResp, ok := objResp.ObjData.(map[string]any)
 	if !ok {
-		objLogger.LogEntry("Unexpected response format", 0, true)
+		return errors.New("Unexpected response format")
 	}
 	strStatus, ok := dictResp["status"].(string)
 	if !ok {
-		objLogger.LogEntry("No status in response", 0, true)
+		return errors.New("No status in response")
 	}
 	objLogger.Log(fmt.Sprintf("Status: %v", strStatus))
-
+	return nil
 }
-
-const iMaxMessageLen = 600
 
 var reNonDigit = regexp.MustCompile(`[^0-9]`)
 
@@ -122,7 +123,7 @@ func SanitizePhone(strInput string) (string, error) {
 // place in message text, while leaving normal language, punctuation,
 // and unicode untouched. Returns an error if the message is empty,
 // oversized, or made entirely of characters that got stripped.
-func SanitizeSmsBody(strInput string) (string, error) {
+func SanitizeSmsBody(strInput string, iMaxMessageLen int) (string, error) {
 	if strInput == "" {
 		return "", fmt.Errorf("message body is empty")
 	}
