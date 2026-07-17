@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
 	"os"
@@ -182,4 +183,28 @@ func BasePaths() (*PathConfig, error) {
 	}
 
 	return objPaths, nil
+}
+
+// ReadLine prompts on stdout (if strPrompt is non-empty) and reads a
+// single line from stdin, spaces and all. Returns an error if stdin
+// is closed/exhausted before a line is read, or if the scanner itself
+// fails (e.g. an underlying I/O error).
+func ReadLine(strPrompt string) (string, error) {
+	if strPrompt != "" {
+		fmt.Print(strPrompt)
+	}
+
+	objScanner := bufio.NewScanner(os.Stdin)
+
+	bHasLine := objScanner.Scan()
+	if !bHasLine {
+		objErr := objScanner.Err()
+		if objErr != nil {
+			return "", fmt.Errorf("failed to read line: %w", objErr)
+		}
+		return "", fmt.Errorf("no input received (stdin closed)")
+	}
+
+	strLine := objScanner.Text()
+	return strLine, nil
 }
