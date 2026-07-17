@@ -139,10 +139,10 @@ func DirExists(strPath string) bool {
 
 // PathConfig holds the base paths resolved at startup.
 type PathConfig struct {
-	StrDefConf    string // default config file path
-	StrDefLogFile string // default log file path
-	StrScriptName string // name of the running script/exe
-	StrExeDir     string // directory containing the executable
+	DefConf    string // default config file path
+	DefLogFile string // default log file path
+	AppName    string // name of the running exe
+	ExeDir     string // directory containing the executable
 }
 
 func BasePaths() (*PathConfig, error) {
@@ -152,7 +152,7 @@ func BasePaths() (*PathConfig, error) {
 		return nil, err
 	}
 	strExeDir := filepath.Dir(strExePath)
-	strScriptName := filepath.Base(strExePath)
+	strAppName := filepath.Base(strExePath)
 
 	strISO := time.Now().Format("-2006-01-02T15-04-05")
 
@@ -163,10 +163,10 @@ func BasePaths() (*PathConfig, error) {
 	}
 
 	// Default config and log file paths
-	strBaseName := strScriptName
-	iDotPos := strings.LastIndex(strScriptName, ".")
+	strBaseName := strAppName
+	iDotPos := strings.LastIndex(strAppName, ".")
 	if iDotPos >= 1 {
-		strBaseName = strScriptName[:iDotPos]
+		strBaseName = strAppName[:iDotPos]
 	}
 	strConfName := "config.ini"
 	strDefConf := filepath.Join(strExeDir, strConfName)
@@ -175,10 +175,10 @@ func BasePaths() (*PathConfig, error) {
 	strDefLogFile := filepath.Join(strLogDir, strLogFilename)
 
 	objPaths := &PathConfig{
-		StrDefConf:    strDefConf,
-		StrDefLogFile: strDefLogFile,
-		StrScriptName: strScriptName,
-		StrExeDir:     strExeDir,
+		DefConf:    strDefConf,
+		DefLogFile: strDefLogFile,
+		AppName:    strAppName,
+		ExeDir:     strExeDir,
 	}
 
 	return objPaths, nil
