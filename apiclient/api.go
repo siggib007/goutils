@@ -76,26 +76,47 @@ func (a *APIClient) rateLimit() {
 	a.tLastCall = time.Now()
 }
 
-// MakeAPICall makes an HTTP API call with the given parameters
-func (a *APIClient) MakeAPICall(strURL string, dictHeader map[string]string, strMethod string, dictPayload any, lstFiles map[string]string, strUser string, strPWD string) APIResponse {
+// APICallOptions holds all parameters for MakeAPICall.
+//
+// Body precedence when StrMethod is POST: LstFiles (multipart) takes
+// priority over StrRawBody, which takes priority over DictPayload
+// (JSON). Only one body-construction path runs per call.
+//
+// When StrRawBody is set, the caller is responsible for setting the
+// correct Content-Type in DictHeader — MakeAPICall will not infer or
+// overwrite it, unlike the JSON and multipart paths which set their
+// own Content-Type automatically.
+type APICallOptions struct {
+	StrURL      string
+	DictHeader  map[string]string
+	StrMethod   string
+	DictPayload any
+	StrRawBody  string
+	LstFiles    map[string]string
+	StrUser     string
+	StrPWD      string
+}
+
+// MakeAPICall makes an HTTP API call per the given options.
+func (a *APIClient) MakeAPICall(objOpts APICallOptions) APIResponse {
 	a.rateLimit()
 
-	a.objLogger.LogEntry(fmt.Sprintf("Doing a %s to URL: %s", strMethod, strURL), 1, false)
+	a.objLogger.LogEntry(fmt.Sprintf("Doing a %s to URL: %s", objOpts.StrMethod, objOpts.StrURL), 1, false)
 
 	var objBody io.Reader
 	var strContentType string
 
-	switch strings.ToLower(strMethod) {
+	switch strings.ToLower(objOpts.StrMethod) {
 	case "get", "delete":
 		objBody = nil
 
 	case "post":
-		if len(lstFiles) > 0 {
+		if len(objOpts.LstFiles) > 0 {
 			objBuf := &bytes.Buffer{}
 			objWriter := multipart.NewWriter(objBuf)
 
-			if dictPayload != nil {
-				jsonBytes, err := json.Marshal(dictPayload)
+			if objOpts.DictPayload != nil {
+				jsonBytes, err := json.Marshal(objOpts.DictPayload)
 				if err != nil {
 					return APIResponse{BSuccess: false, StrError: err.Error()}
 				}
@@ -106,7 +127,7 @@ func (a *APIClient) MakeAPICall(strURL string, dictHeader map[string]string, str
 				objPart.Write(jsonBytes)
 			}
 
-			for strKey, strFilePath := range lstFiles {
+			for strKey, strFilePath := range objOpts.LstFiles {
 				objFile, err := os.Open(strFilePath)
 				if err != nil {
 					return APIResponse{BSuccess: false, StrError: fmt.Sprintf("unable to open attachment %s: %s", strFilePath, err.Error())}
@@ -122,8 +143,13 @@ func (a *APIClient) MakeAPICall(strURL string, dictHeader map[string]string, str
 			objBody = objBuf
 			strContentType = objWriter.FormDataContentType()
 
-		} else if dictPayload != nil {
-			jsonBytes, err := json.Marshal(dictPayload)
+		} else if objOpts.StrRawBody != "" {
+			objBody = strings.NewReader(objOpts.StrRawBody)
+			// strContentType intentionally left unset — caller supplies it
+			// via DictHeader (e.g. "application/x-www-form-urlencoded")
+
+		} else if objOpts.DictPayload != nil {
+			jsonBytes, err := json.Marshal(objOpts.DictPayload)
 			if err != nil {
 				return APIResponse{BSuccess: false, StrError: err.Error()}
 			}
@@ -132,24 +158,24 @@ func (a *APIClient) MakeAPICall(strURL string, dictHeader map[string]string, str
 		}
 	}
 
-	objReq, err := http.NewRequest(strings.ToUpper(strMethod), strURL, objBody)
+	objReq, err := http.NewRequest(strings.ToUpper(objOpts.StrMethod), objOpts.StrURL, objBody)
 	if err != nil {
 		return APIResponse{BSuccess: false, StrError: err.Error()}
 	}
 
-	for strKey, strVal := range dictHeader {
+	for strKey, strVal := range objOpts.DictHeader {
 		objReq.Header.Set(strKey, strVal)
 	}
 	if strContentType != "" {
 		objReq.Header.Set("Content-Type", strContentType)
 	}
-	if strUser != "" {
-		objReq.SetBasicAuth(strUser, strPWD)
+	if objOpts.StrUser != "" {
+		objReq.SetBasicAuth(objOpts.StrUser, objOpts.StrPWD)
 	}
 
 	// Scrub secrets from log
 	dictLogHeader := make(map[string]string)
-	for strKey, strVal := range dictHeader {
+	for strKey, strVal := range objOpts.DictHeader {
 		if strings.ToLower(strKey) == "authorization" {
 			dictLogHeader[strKey] = strVal[:10] + "**********"
 		} else {
