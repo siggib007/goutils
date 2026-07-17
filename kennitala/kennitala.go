@@ -1,3 +1,6 @@
+// Package kennitala has one simple function,
+// validating if a string contains a mathimatically
+// valid Icelandic Tax ID, known as Kennitala in icelandic
 package kennitala
 
 import "strings"

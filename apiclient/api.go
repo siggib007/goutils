@@ -1,3 +1,6 @@
+// Package apiclient provides helpers for making REST API calls,
+// anything from handling the client, validating stuff,
+// error handling, URL building, etc.
 package apiclient
 
 import (
@@ -20,22 +23,22 @@ import (
 
 // APIResponse holds the result of an API call
 type APIResponse struct {
-	BSuccess bool
-	ObjData  any
-	StrError string
+	Success bool
+	Data    any
+	Error   string
 }
 
 // APIClient handles HTTP API calls with rate limiting and proxy support
 type APIClient struct {
-	objHTTP     *http.Client
-	strProxy    string
-	iMinQuiet   time.Duration
-	iTimeOut    time.Duration
-	tLastCall   time.Time
-	IStatusCode int
-	iTotalSleep time.Duration
-	mu          sync.Mutex
-	objLogger   *logger.Logger
+	HTTPClient *http.Client
+	Proxy      string
+	MinQuiet   time.Duration
+	TimeOut    time.Duration
+	LastCall   time.Time
+	StatusCode int
+	TotalSleep time.Duration
+	mu         sync.Mutex
+	Logger     *logger.Logger
 }
 
 // NewAPIClient creates a new APIClient
@@ -50,13 +53,14 @@ func NewAPIClient(strProxy string, iTimeOut int, iMinQuiet int, objLogger *logge
 		}
 	}
 	return &APIClient{
-		objHTTP: &http.Client{
+		HTTPClient: &http.Client{
 			Timeout:   time.Duration(iTimeOut) * time.Second,
 			Transport: objTransport,
 		},
-		iMinQuiet: time.Duration(iMinQuiet) * time.Second,
-		iTimeOut:  time.Duration(iTimeOut) * time.Second,
-		objLogger: objLogger,
+		Proxy:    strProxy,
+		MinQuiet: time.Duration(iMinQuiet) * time.Second,
+		TimeOut:  time.Duration(iTimeOut) * time.Second,
+		Logger:   objLogger,
 	}
 }
 
@@ -64,16 +68,16 @@ func (a *APIClient) rateLimit() {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	fDelta := time.Since(a.tLastCall)
-	a.objLogger.LogEntry(fmt.Sprintf("It's been %.2f seconds since last API call", fDelta.Seconds()), 4, false)
+	fDelta := time.Since(a.LastCall)
+	a.Logger.LogEntry(fmt.Sprintf("It's been %.2f seconds since last API call", fDelta.Seconds()), 4, false)
 
-	if fDelta < a.iMinQuiet {
-		iWait := a.iMinQuiet - fDelta
-		a.objLogger.LogEntry(fmt.Sprintf("Waiting %.2f seconds before next API call", iWait.Seconds()), 4, false)
-		a.iTotalSleep += iWait
+	if fDelta < a.MinQuiet {
+		iWait := a.MinQuiet - fDelta
+		a.Logger.LogEntry(fmt.Sprintf("Waiting %.2f seconds before next API call", iWait.Seconds()), 4, false)
+		a.TotalSleep += iWait
 		time.Sleep(iWait)
 	}
-	a.tLastCall = time.Now()
+	a.LastCall = time.Now()
 }
 
 // APICallOptions holds all parameters for MakeAPICall.
@@ -87,144 +91,156 @@ func (a *APIClient) rateLimit() {
 // overwrite it, unlike the JSON and multipart paths which set their
 // own Content-Type automatically.
 type APICallOptions struct {
-	StrURL      string
-	DictHeader  map[string]string
-	StrMethod   string
-	DictPayload any
-	StrRawBody  string
-	LstFiles    map[string]string
-	StrUser     string
-	StrPWD      string
+	URL     string
+	Header  map[string]string
+	Method  string
+	Payload any
+	RawBody string
+	Files   map[string]string
+	UserID  string
+	PWD     string
 }
 
 // MakeAPICall makes an HTTP API call per the given options.
 func (a *APIClient) MakeAPICall(objOpts APICallOptions) APIResponse {
 	a.rateLimit()
 
-	a.objLogger.LogEntry(fmt.Sprintf("Doing a %s to URL: %s", objOpts.StrMethod, objOpts.StrURL), 1, false)
+	a.Logger.LogEntry(fmt.Sprintf("Doing a %s to URL: %s", objOpts.Method, objOpts.URL), 1, false)
 
 	var objBody io.Reader
 	var strContentType string
 
-	switch strings.ToLower(objOpts.StrMethod) {
+	switch strings.ToLower(objOpts.Method) {
 	case "get", "delete":
 		objBody = nil
 
 	case "post":
-		if len(objOpts.LstFiles) > 0 {
+		if len(objOpts.Files) > 0 {
 			objBuf := &bytes.Buffer{}
 			objWriter := multipart.NewWriter(objBuf)
 
-			if objOpts.DictPayload != nil {
-				jsonBytes, err := json.Marshal(objOpts.DictPayload)
+			if objOpts.Payload != nil {
+				jsonBytes, err := json.Marshal(objOpts.Payload)
 				if err != nil {
-					return APIResponse{BSuccess: false, StrError: err.Error()}
+					return APIResponse{Success: false, Error: err.Error()}
 				}
 				objPart, err := objWriter.CreateFormField("data")
 				if err != nil {
-					return APIResponse{BSuccess: false, StrError: err.Error()}
+					return APIResponse{Success: false, Error: err.Error()}
 				}
-				objPart.Write(jsonBytes)
+				if _, err := objPart.Write(jsonBytes); err != nil {
+					return APIResponse{Success: false, Error: err.Error()}
+				}
 			}
 
-			for strKey, strFilePath := range objOpts.LstFiles {
+			for strKey, strFilePath := range objOpts.Files {
 				objFile, err := os.Open(strFilePath)
 				if err != nil {
-					return APIResponse{BSuccess: false, StrError: fmt.Sprintf("unable to open attachment %s: %s", strFilePath, err.Error())}
+					return APIResponse{Success: false, Error: fmt.Sprintf("unable to open attachment %s: %s", strFilePath, err.Error())}
 				}
-				defer objFile.Close()
+				defer func() {
+					_ = objFile.Close()
+				}()
 				objPart, err := objWriter.CreateFormFile(strKey, filepath.Base(strFilePath))
 				if err != nil {
-					return APIResponse{BSuccess: false, StrError: err.Error()}
+					return APIResponse{Success: false, Error: err.Error()}
 				}
-				io.Copy(objPart, objFile)
+				if _, err := io.Copy(objPart, objFile); err != nil {
+					return APIResponse{Success: false, Error: err.Error()}
+				}
 			}
-			objWriter.Close()
+			if err := objWriter.Close(); err != nil {
+				return APIResponse{Success: false, Error: err.Error()}
+			}
 			objBody = objBuf
 			strContentType = objWriter.FormDataContentType()
 
-		} else if objOpts.StrRawBody != "" {
-			objBody = strings.NewReader(objOpts.StrRawBody)
+		} else if objOpts.RawBody != "" {
+			objBody = strings.NewReader(objOpts.RawBody)
 			// strContentType intentionally left unset — caller supplies it
 			// via DictHeader (e.g. "application/x-www-form-urlencoded")
 
-		} else if objOpts.DictPayload != nil {
-			jsonBytes, err := json.Marshal(objOpts.DictPayload)
+		} else if objOpts.Payload != nil {
+			jsonBytes, err := json.Marshal(objOpts.Payload)
 			if err != nil {
-				return APIResponse{BSuccess: false, StrError: err.Error()}
+				return APIResponse{Success: false, Error: err.Error()}
 			}
 			objBody = bytes.NewReader(jsonBytes)
 			strContentType = "application/json"
 		}
 	}
 
-	objReq, err := http.NewRequest(strings.ToUpper(objOpts.StrMethod), objOpts.StrURL, objBody)
+	objReq, err := http.NewRequest(strings.ToUpper(objOpts.Method), objOpts.URL, objBody)
 	if err != nil {
-		return APIResponse{BSuccess: false, StrError: err.Error()}
+		return APIResponse{Success: false, Error: err.Error()}
 	}
 
-	for strKey, strVal := range objOpts.DictHeader {
+	for strKey, strVal := range objOpts.Header {
 		objReq.Header.Set(strKey, strVal)
 	}
 	if strContentType != "" {
 		objReq.Header.Set("Content-Type", strContentType)
 	}
-	if objOpts.StrUser != "" {
-		objReq.SetBasicAuth(objOpts.StrUser, objOpts.StrPWD)
+	if objOpts.UserID != "" {
+		objReq.SetBasicAuth(objOpts.UserID, objOpts.PWD)
 	}
 
 	// Scrub secrets from log
 	dictLogHeader := make(map[string]string)
-	for strKey, strVal := range objOpts.DictHeader {
+	for strKey, strVal := range objOpts.Header {
 		if strings.ToLower(strKey) == "authorization" {
 			dictLogHeader[strKey] = strVal[:10] + "**********"
 		} else {
 			dictLogHeader[strKey] = strVal
 		}
 	}
-	a.objLogger.LogEntry(fmt.Sprintf("Headers: %v", dictLogHeader), 4, false)
+	a.Logger.LogEntry(fmt.Sprintf("Headers: %v", dictLogHeader), 4, false)
 
-	objResp, err := a.objHTTP.Do(objReq)
+	objResp, err := a.HTTPClient.Do(objReq)
 	if err != nil {
-		return APIResponse{BSuccess: false, StrError: err.Error()}
+		return APIResponse{Success: false, Error: err.Error()}
 	}
-	defer objResp.Body.Close()
+	defer func() {
+		_ = objResp.Body.Close()
+	}()
 
-	a.IStatusCode = objResp.StatusCode
-	a.objLogger.LogEntry(fmt.Sprintf("Call resulted in status code %d", a.IStatusCode), 3, false)
+	a.StatusCode = objResp.StatusCode
+	a.Logger.LogEntry(fmt.Sprintf("Call resulted in status code %d", a.StatusCode), 3, false)
 
 	objRespBody, err := io.ReadAll(objResp.Body)
 	if err != nil {
-		return APIResponse{BSuccess: false, StrError: err.Error()}
+		return APIResponse{Success: false, Error: err.Error()}
 	}
 	strPreview := string(objRespBody)
-	a.objLogger.LogEntry(fmt.Sprintf("Response from API was:\n%v", strPreview), 8, false)
+	a.Logger.LogEntry(fmt.Sprintf("Response from API was:\n%v", strPreview), 8, false)
 	if len(strPreview) > 100 {
 		strPreview = strPreview[:100] + "..."
 	}
 
 	if objResp.StatusCode != 200 && objResp.StatusCode != 201 && objResp.StatusCode != 204 {
-		a.objLogger.LogEntry(fmt.Sprintf("HTTP Error: %d - %s", objResp.StatusCode, strPreview), 3, false)
-		return APIResponse{BSuccess: false, StrError: fmt.Sprintf("HTTP %d: %s", objResp.StatusCode, strPreview)}
+		a.Logger.LogEntry(fmt.Sprintf("HTTP Error: %d - %s", objResp.StatusCode, strPreview), 3, false)
+		return APIResponse{Success: false, Error: fmt.Sprintf("HTTP %d: %s", objResp.StatusCode, strPreview)}
 	}
 
 	strRespText := string(objRespBody)
 	if strings.HasPrefix(strRespText[:min(99, len(strRespText))], "<html>") || strRespText == "" {
-		return APIResponse{BSuccess: false, StrError: "response was HTML or empty"}
+		return APIResponse{Success: false, Error: "response was HTML or empty"}
 	}
 
 	if err := ValidateJSONShape(objRespBody); err != nil {
-		return APIResponse{BSuccess: false, StrError: err.Error()}
+		return APIResponse{Success: false, Error: err.Error()}
 	}
 
 	var objResult any
 	if err := json.Unmarshal(objRespBody, &objResult); err != nil {
-		return APIResponse{BSuccess: false, StrError: fmt.Sprintf("failed to parse JSON: %s", err.Error())}
+		return APIResponse{Success: false, Error: fmt.Sprintf("failed to parse JSON: %s", err.Error())}
 	}
 
-	return APIResponse{BSuccess: true, ObjData: objResult}
+	return APIResponse{Success: true, Data: objResult}
 }
 
+// BuildURL is a helper function for constructing a valid URL with parameters and all
+// Detects if API simulator is being used sends back just the BaseURL
 func BuildURL(strBaseURL string, strEndPoint string, dictParams map[string]string) string {
 	if strings.Contains(strBaseURL, "apisim") {
 		return strBaseURL

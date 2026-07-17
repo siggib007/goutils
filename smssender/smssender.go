@@ -1,3 +1,6 @@
+// Package smssender provides helpers for validating and sending SMS
+// messages through the Twilio API, including sender ID validation and
+// message body sanitization.
 package smssender
 
 import (
@@ -12,6 +15,7 @@ import (
 	"github.com/siggib007/goutils/logger"
 )
 
+// TwilioConfig holds all the details needed for API call to Twilio
 type TwilioConfig struct {
 	BaseURL      string
 	ClientID     string
@@ -23,19 +27,21 @@ type TwilioConfig struct {
 	MaxMsgLen    int
 }
 
+// SendOptions holds all the message specific details
 type SendOptions struct {
 	MsgTo   string
 	Message string
 	AppName string
 }
 
+// SendSMS handles making the API call to the Twilio API that actually sends the message
 func SendSMS(objSendOption SendOptions, objCfg TwilioConfig, objLogger *logger.Logger) error {
 	// Validate required config
 	if objCfg.BaseURL == "" || objCfg.ClientID == "" || objCfg.ClientSecret == "" {
 		return fmt.Errorf("SendSMS: Twilio credentials or URL missing")
 	}
 
-	if err := ValidateAlphanumericSenderId(objCfg.MsgFrom); err != nil {
+	if err := ValidateAlphanumericSenderID(objCfg.MsgFrom); err != nil {
 		return fmt.Errorf("SendSMS: invalid sender id: %w", err)
 	}
 
@@ -64,25 +70,25 @@ func SendSMS(objSendOption SendOptions, objCfg TwilioConfig, objLogger *logger.L
 	dictMyParams := make(map[string]string)
 	strURL := apiclient.BuildURL(objCfg.BaseURL, objCfg.ClientID+"/Messages.json", dictMyParams)
 	objCallOptions := apiclient.APICallOptions{}
-	objCallOptions.StrURL = strURL
-	objCallOptions.DictHeader = dictHeader
-	objCallOptions.StrMethod = "POST"
-	objCallOptions.StrRawBody = strEncoded
-	objCallOptions.StrUser = objCfg.ClientID
-	objCallOptions.StrPWD = objCfg.ClientSecret
+	objCallOptions.URL = strURL
+	objCallOptions.Header = dictHeader
+	objCallOptions.Method = "POST"
+	objCallOptions.RawBody = strEncoded
+	objCallOptions.UserID = objCfg.ClientID
+	objCallOptions.PWD = objCfg.ClientSecret
 
 	objLogger.Log("Posting Message")
 	objResp := objAPI.MakeAPICall(objCallOptions)
-	if !objResp.BSuccess {
+	if !objResp.Success {
 		return fmt.Errorf("SendSMS: Failed to send message: %w", err)
 	}
-	dictResp, ok := objResp.ObjData.(map[string]any)
+	dictResp, ok := objResp.Data.(map[string]any)
 	if !ok {
-		return errors.New("Unexpected response format")
+		return errors.New("nexpected response format")
 	}
 	strStatus, ok := dictResp["status"].(string)
 	if !ok {
-		return errors.New("No status in response")
+		return errors.New("no status in response")
 	}
 	objLogger.Log(fmt.Sprintf("Status: %v", strStatus))
 	return nil
@@ -151,26 +157,26 @@ func SanitizeSmsBody(strInput string, iMaxMessageLen int) (string, error) {
 	return strTrimmed, nil
 }
 
-const iMaxSenderIdLen = 11
+const iMaxSenderIDLen = 11
 
-var reValidSenderIdChars = regexp.MustCompile(`^[A-Za-z0-9 &_-]+$`)
+var reValidSenderIDChars = regexp.MustCompile(`^[A-Za-z0-9 &_-]+$`)
 
-// ValidateAlphanumericSenderId enforces Twilio's alphanumeric sender ID
+// ValidateAlphanumericSenderID enforces Twilio's alphanumeric sender ID
 // requirements: up to 11 characters, letters/digits/spaces plus
 // hyphen, underscore, and ampersand only. Returns an error describing
 // the specific violation rather than a bare pass/fail.
-func ValidateAlphanumericSenderId(strSenderId string) error {
-	if strSenderId == "" {
+func ValidateAlphanumericSenderID(strSenderID string) error {
+	if strSenderID == "" {
 		return fmt.Errorf("sender ID is empty")
 	}
 
-	iLen := len(strSenderId)
-	if iLen > iMaxSenderIdLen {
-		return fmt.Errorf("sender ID %q is %d characters, exceeds max of %d", strSenderId, iLen, iMaxSenderIdLen)
+	iLen := len(strSenderID)
+	if iLen > iMaxSenderIDLen {
+		return fmt.Errorf("sender ID %q is %d characters, exceeds max of %d", strSenderID, iLen, iMaxSenderIDLen)
 	}
 
-	if !reValidSenderIdChars.MatchString(strSenderId) {
-		return fmt.Errorf("sender ID %q contains characters outside the allowed set (letters, digits, space, -, _, &)", strSenderId)
+	if !reValidSenderIDChars.MatchString(strSenderID) {
+		return fmt.Errorf("sender ID %q contains characters outside the allowed set (letters, digits, space, -, _, &)", strSenderID)
 	}
 
 	return nil

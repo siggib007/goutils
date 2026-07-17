@@ -1,3 +1,7 @@
+// Package logger is my own logging function
+// that has a built in abort mechanism
+// that triggers a panic if an abort parameter is set to true
+// also uses numeric log levels, instead of info, warn, error, etc.
 package logger
 
 import (
@@ -34,13 +38,14 @@ func NewLogger(strLogFile string, iVerbose int) (*Logger, error) {
 func (l *Logger) LogEntry(strMsg string, iMsgLevel int, bAbort bool) {
 	strTimeStamp := time.Now().Format("01-02-2006 15:04:05")
 	if l.IVerbose > iMsgLevel {
-		fmt.Fprintf(l.ObjLogOut, "%s : %s\n", strTimeStamp, strMsg)
+		_, _ = fmt.Fprintf(l.ObjLogOut, "%s : %s\n", strTimeStamp, strMsg)
 		fmt.Println(strMsg)
 		if l.FnUILog != nil {
 			l.FnUILog(strMsg)
 		}
 	} else if bAbort {
-		fmt.Fprintf(l.ObjLogOut, "%s : %s\n", strTimeStamp, strMsg)
+		_, _ = fmt.Fprintf(l.ObjLogOut, "%s : %s\n", strTimeStamp, strMsg)
+		fmt.Println(strMsg)
 	}
 	if bAbort {
 		l.Close()
@@ -55,10 +60,12 @@ func (l *Logger) Log(strMsg string) {
 
 // Close closes the log file
 func (l *Logger) Close() {
-	l.ObjLogOut.Close()
+	_ = l.ObjLogOut.Close()
 	fmt.Println("objLogOut closed")
 }
 
+// RecoverAbort handles panic recovery. Exits orderly upon panic
+// with exit code to indicate if it was intentional or unexpected
 func (l *Logger) RecoverAbort() {
 	objRecovered := recover()
 	if objRecovered == nil {
