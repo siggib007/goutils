@@ -168,7 +168,7 @@ func BasePaths() (*PathConfig, error) {
 	if iDotPos >= 1 {
 		strBaseName = strScriptName[:iDotPos]
 	}
-	strConfName := strBaseName + ".ini"
+	strConfName := "config.ini"
 	strDefConf := filepath.Join(strExeDir, strConfName)
 
 	strLogFilename := strBaseName + strISO + ".log"
