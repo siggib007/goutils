@@ -52,7 +52,7 @@ func GetInput(strPrompt string) string {
 	var strInput string
 	_, objErr := fmt.Scanln(&strInput)
 	if objErr != nil {
-		fmt.Printf("Issue reading console: %v", objErr)
+		fmt.Printf("Issue reading console: %v\n", objErr)
 	}
 	return strings.TrimSpace(strInput)
 }
