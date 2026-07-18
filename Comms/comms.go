@@ -1,7 +1,8 @@
-// Package smssender provides helpers for validating and sending SMS
+// Package comms provides various communications helpers such as sms, slack and email
+// For example SendSMS validates and sends SMS
 // messages through the Twilio API, including sender ID validation and
 // message body sanitization.
-package smssender
+package comms
 
 import (
 	"errors"
