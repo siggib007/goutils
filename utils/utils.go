@@ -47,6 +47,7 @@ func MatchPattern(strName string, strPattern string) bool {
 }
 
 // GetInput prints a prompt and reads a line from stdin
+// Not designed for non-interactive situations like piping stdin.
 func GetInput(strPrompt string) string {
 	fmt.Print(strPrompt)
 	var strInput string
@@ -54,7 +55,8 @@ func GetInput(strPrompt string) string {
 	if objErr != nil {
 		fmt.Printf("Issue reading console: %v\n", objErr)
 	}
-	return strings.TrimSpace(strInput)
+	strLine := strings.TrimSpace(strInput)
+	return StripQuotes(strLine)
 }
 
 // ChkDir checks if a directory exists and creates it if not
@@ -202,6 +204,7 @@ func BasePaths() (*PathConfig, error) {
 // single line from stdin, spaces and all. Returns an error if stdin
 // is closed/exhausted before a line is read, or if the scanner itself
 // fails (e.g. an underlying I/O error).
+// Not designed for non-interactive situations like piping stdin.
 func ReadLine(strPrompt string) (string, error) {
 	if strPrompt != "" {
 		fmt.Print(strPrompt)
@@ -218,7 +221,8 @@ func ReadLine(strPrompt string) (string, error) {
 		return "", fmt.Errorf("no input received (stdin closed)")
 	}
 
-	strLine := objScanner.Text()
+	strLine := strings.TrimSpace(objScanner.Text())
+	strLine = StripQuotes(strLine)
 	return strLine, nil
 }
 
@@ -300,4 +304,23 @@ func ValidateConfPath(objLogger *logger.Logger, strConfFile *string, bUseEnv boo
 	} else {
 		*strConfFile = "env"
 	}
+}
+
+// StripQuotes removes a single matching pair of leading/trailing quote
+// characters (" or ') if present. Unquoted or mismatched-quote strings
+// are returned unchanged.
+func StripQuotes(strInput string) string {
+	if len(strInput) < 2 {
+		return strInput
+	}
+
+	chFirst := strInput[0]
+	chLast := strInput[len(strInput)-1]
+	bIsQuoteChar := chFirst == '"' || chFirst == '\''
+
+	if bIsQuoteChar && chFirst == chLast {
+		return strInput[1 : len(strInput)-1]
+	}
+
+	return strInput
 }
